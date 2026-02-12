@@ -4,6 +4,8 @@ from cpython.datetime cimport (
     PyDateTime_CheckExact, PyDelta_CheckExact,
     datetime_tzinfo, timedelta_days, timedelta_seconds, timedelta_microseconds,
 )
+from libc.stdlib cimport malloc, realloc, free
+from libc.string cimport memcpy
 
 cdef ExtType
 cdef Timestamp
@@ -37,9 +39,13 @@ cdef extern from "pack.h":
     int msgpack_pack_ext(msgpack_packer* pk, char typecode, size_t l) except -1
     int msgpack_pack_timestamp(msgpack_packer* x, long long seconds, unsigned long nanoseconds) except -1
 
+# Declare msgpack_pack_raw_body as nogil-safe since it only does memcpy
+cdef extern from "pack.h" nogil:
+    int msgpack_pack_raw_body(msgpack_packer* pk, const char* body, size_t l)
 
 cdef int DEFAULT_RECURSE_LIMIT=511
 cdef long long ITEM_LIMIT = (2**32)-1
+cdef size_t NOGIL_THRESHOLD = 1024  # Only release GIL for payloads > 1KB
 
 
 cdef inline int PyBytesLike_Check(object o):
@@ -111,7 +117,7 @@ cdef class Packer:
     cdef bint datetime
 
     def __cinit__(self, buf_size=256*1024, **_kwargs):
-        self.pk.buf = <char*> PyMem_Malloc(buf_size)
+        self.pk.buf = <char*> malloc(buf_size)
         if self.pk.buf == NULL:
             raise MemoryError("Unable to allocate internal buffer.")
         self.pk.buf_size = buf_size
@@ -119,7 +125,7 @@ cdef class Packer:
         self.exports = 0
 
     def __dealloc__(self):
-        PyMem_Free(self.pk.buf)
+        free(self.pk.buf)
         self.pk.buf = NULL
         assert self.exports == 0
 
@@ -157,6 +163,7 @@ cdef class Packer:
         cdef Py_ssize_t L
         cdef Py_buffer view
         cdef bint strict = self.strict_types
+        cdef int rc
 
         if o is None:
             msgpack_pack_nil(&self.pk)
@@ -188,7 +195,13 @@ cdef class Packer:
                 PyErr_Format(ValueError, b"%.200s object is too large", Py_TYPE(o).tp_name)
             rawval = o
             msgpack_pack_bin(&self.pk, L)
-            msgpack_pack_raw_body(&self.pk, rawval, L)
+            if L > NOGIL_THRESHOLD:
+                with nogil:
+                    rc = msgpack_pack_raw_body(&self.pk, rawval, L)
+                if rc == -1:
+                    raise MemoryError("Unable to allocate internal buffer.")
+            else:
+                msgpack_pack_raw_body(&self.pk, rawval, L)
         elif PyUnicode_CheckExact(o) if strict else PyUnicode_Check(o):
             if self.unicode_errors == NULL:
                 rawval = PyUnicode_AsUTF8AndSize(o, &L)
@@ -201,7 +214,13 @@ cdef class Packer:
                     raise ValueError("unicode string is too large")
                 rawval = o
             msgpack_pack_raw(&self.pk, L)
-            msgpack_pack_raw_body(&self.pk, rawval, L)
+            if L > NOGIL_THRESHOLD:
+                with nogil:
+                    rc = msgpack_pack_raw_body(&self.pk, rawval, L)
+                if rc == -1:
+                    raise MemoryError("Unable to allocate internal buffer.")
+            else:
+                msgpack_pack_raw_body(&self.pk, rawval, L)
         elif PyDict_CheckExact(o) if strict else PyDict_Check(o):
             L = len(o)
             if L > ITEM_LIMIT:
@@ -217,7 +236,13 @@ cdef class Packer:
             if L > ITEM_LIMIT:
                 raise ValueError("EXT data is too large")
             msgpack_pack_ext(&self.pk, <long>o.code, L)
-            msgpack_pack_raw_body(&self.pk, rawval, L)
+            if L > NOGIL_THRESHOLD:
+                with nogil:
+                    rc = msgpack_pack_raw_body(&self.pk, rawval, L)
+                if rc == -1:
+                    raise MemoryError("Unable to allocate internal buffer.")
+            else:
+                msgpack_pack_raw_body(&self.pk, rawval, L)
         elif type(o) is Timestamp:
             llval = o.seconds
             ulval = o.nanoseconds
@@ -237,7 +262,13 @@ cdef class Packer:
                 raise ValueError("memoryview is too large")
             try:
                 msgpack_pack_bin(&self.pk, L)
-                msgpack_pack_raw_body(&self.pk, <char*>view.buf, L)
+                if L > NOGIL_THRESHOLD:
+                    with nogil:
+                        rc = msgpack_pack_raw_body(&self.pk, <char*>view.buf, L)
+                    if rc == -1:
+                        raise MemoryError("Unable to allocate internal buffer.")
+                else:
+                    msgpack_pack_raw_body(&self.pk, <char*>view.buf, L)
             finally:
                 PyBuffer_Release(&view);
         elif self.datetime and PyDateTime_CheckExact(o) and datetime_tzinfo(o) is not None:
@@ -286,11 +317,22 @@ cdef class Packer:
 
     @cython.critical_section
     def pack_ext_type(self, typecode, data):
+        cdef int rc
+        cdef Py_ssize_t L
+        cdef const char* rawval
         self._check_exports()
-        if len(data) > ITEM_LIMIT:
+        L = len(data)
+        if L > ITEM_LIMIT:
             raise ValueError("ext data too large")
-        msgpack_pack_ext(&self.pk, typecode, len(data))
-        msgpack_pack_raw_body(&self.pk, data, len(data))
+        rawval = data  # Extract pointer while GIL is held
+        msgpack_pack_ext(&self.pk, typecode, L)
+        if L > NOGIL_THRESHOLD:
+            with nogil:
+                rc = msgpack_pack_raw_body(&self.pk, rawval, L)
+            if rc == -1:
+                raise MemoryError("Unable to allocate internal buffer.")
+        else:
+            msgpack_pack_raw_body(&self.pk, rawval, L)
 
     @cython.critical_section
     def pack_array_header(self, long long size):

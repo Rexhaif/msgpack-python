@@ -44,10 +44,9 @@ static inline int msgpack_pack_write(msgpack_packer* pk, const char *data, size_
 
     if (len + l > bs) {
         bs = (len + l) * 2;
-        buf = (char*)PyMem_Realloc(buf, bs);
+        buf = (char*)realloc(buf, bs);
         if (!buf) {
-            PyErr_NoMemory();
-            return -1;
+            return -1;  // caller checks and raises MemoryError with GIL held
         }
     }
     memcpy(buf + len, data, l);
