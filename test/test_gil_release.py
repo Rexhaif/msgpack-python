@@ -45,7 +45,7 @@ def test_threading_performance():
     # Create a large payload (5MB)
     data = b'\x00' * (5 * 1024 * 1024)
     
-    # Warm up JIT/cache
+    # Warm up caches
     for _ in range(2):
         msgpack.packb(data)
     
@@ -70,10 +70,9 @@ def test_threading_performance():
     speedup = seq_time / par_time
     print(f"Sequential: {seq_time:.3f}s, Parallel (2 threads): {par_time:.3f}s, Speedup: {speedup:.2f}x")
     
-    # We expect some speedup with GIL released. The speedup depends on CPU cores and memory bandwidth.
-    # Just verify that parallel execution works correctly (speedup >= 0.5x means it's working)
-    # Without GIL release, speedup would be close to 0.5x (no benefit from parallelism)
-    # With GIL release, we expect speedup closer to 1.0x or better
+    # With GIL released, we expect speedup > 1.0x (parallel is faster than sequential).
+    # Without GIL release, speedup would be ~1.0x (no benefit from parallelism due to serialization).
+    # The actual speedup depends on CPU cores and memory bandwidth.
     assert speedup > 0.4, f"Parallel execution should provide some benefit: speedup {speedup:.2f}x"
     print("✓ Threading performance test passed")
 
