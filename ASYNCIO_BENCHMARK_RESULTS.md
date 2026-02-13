@@ -57,8 +57,59 @@ The most important result: **GIL release enables true thread parallelism**.
 
 - **Individual operation throughput:** Large payloads are slower per operation (87K vs 189K ops/sec) because they have more data to process
 - **Async responsiveness:** Large payloads take longer individually, which can impact event loop scheduling
+- **⚠️ Tail Latency Concern:** P99 latency can be 2-3x higher with GIL release (see [LATENCY_ANALYSIS.md](LATENCY_ANALYSIS.md))
 
 However, the **parallelism benefit** is the primary goal and is clearly demonstrated.
+
+### Important: Latency Considerations
+
+**The Question: "What about the latency?"**
+
+GIL release introduces a **latency trade-off** that's important to understand:
+
+#### Observed Latency Impact
+
+From benchmark runs, tail latencies can increase significantly:
+
+```
+Avg ping latency:  683-1723 µs (small/GIL) → 786-856 µs (large/NoGIL)  
+P99 ping latency:  7764-8068 µs (small/GIL) → 15080-20862 µs (large/NoGIL)
+```
+
+**Key observation:** While average latency may be similar or better, **P99 (tail) latency can be 2-3x worse** with GIL release.
+
+#### Why Does Latency Increase?
+
+1. **Large payloads take longer to process**
+   - 50KB vs 256 bytes is a significant difference
+   - More time spent in memcpy() operations
+   
+2. **Event loop must wait longer**
+   - During long msgpack operations, async tasks can't run
+   - Results in higher worst-case latencies
+   
+3. **But throughput improves**
+   - Multiple threads make progress simultaneously
+   - Total wall-clock time decreases
+   - Better for batch processing
+
+#### When is This Acceptable?
+
+✅ **GIL release is beneficial when:**
+- Throughput > latency (batch processing, ETL, data pipelines)
+- P99 requirements are relaxed (e.g., <100ms acceptable)
+- High concurrent load (many threads/requests)
+- CPU utilization is important
+
+⚠️ **Consider alternatives when:**
+- Low latency is critical (real-time, interactive)
+- Strict P99 requirements (e.g., <10ms)
+- Small messages anyway (<1KB)
+- Sequential processing is acceptable
+
+For detailed latency analysis and decision guidance, see **[LATENCY_ANALYSIS.md](LATENCY_ANALYSIS.md)**.
+
+However, the **parallelism benefit** is the primary goal for most use cases and is clearly demonstrated.
 
 ## Interpretation
 

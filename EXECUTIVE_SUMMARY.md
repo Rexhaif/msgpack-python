@@ -65,6 +65,8 @@
 |----------|---------|
 | `BENCHMARK_README.md` | Quick start guide |
 | `ASYNCIO_BENCHMARK_RESULTS.md` | Detailed results & analysis |
+| `LATENCY_ANALYSIS.md` ⚠️ | **Latency trade-offs and guidance** |
+| `CPU_BASED_SCALING.md` | CPU-based thread scaling |
 | `example_asyncio_usage.py` | Practical usage example |
 
 ### 3. Example Output
@@ -204,4 +206,24 @@ The benchmarks **conclusively demonstrate** that:
 3. Helps **real asyncio applications** (+18% throughput)
 4. Enables **true thread parallelism** for large payloads
 
-The implementation successfully addresses the problem statement by providing comprehensive benchmarks measuring asyncio latency impact and comparing the new GIL-release implementation with the original behavior (simulated via small payloads).
+### ⚠️ Important: Latency Trade-off
+
+**The Question: "What about the latency?"**
+
+GIL release comes with a latency consideration:
+- **Average latency:** Similar or slightly better
+- **Tail latency (P99):** Can be **2-3x higher** with large payloads
+- **Why:** Large payloads take longer to process individually
+- **Impact:** Event loop waits longer during msgpack operations
+
+**When this matters:**
+- ✅ **Use GIL release:** Batch processing, high-throughput systems, relaxed latency (P99 <100ms)
+- ⚠️ **Consider alternatives:** Real-time apps, strict P99 requirements (<10ms), interactive systems
+
+**See [LATENCY_ANALYSIS.md](LATENCY_ANALYSIS.md) for:**
+- Detailed latency measurements and analysis
+- Decision matrix for your use case
+- Mitigation strategies
+- When to use small vs large payloads
+
+The implementation successfully addresses the problem statement by providing comprehensive benchmarks measuring asyncio latency impact and comparing the new GIL-release implementation with the original behavior (simulated via small payloads). The latency trade-off is documented and guidance is provided for different use cases.
