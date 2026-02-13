@@ -7,7 +7,9 @@
 python benchmark_asyncio_parallel.py
 ```
 
-**Key result:** +109.6% parallelism improvement (0.82x → 1.72x with 4 threads)
+**Note:** All benchmarks now automatically scale based on your system's CPU core count to prevent overloading the event loop.
+
+**Key result:** Significant parallelism improvement with CPU-appropriate thread counts
 
 ## What Was Benchmarked
 
@@ -22,6 +24,15 @@ We created benchmarks comparing:
 
 This approach works because the GIL release implementation only activates for payloads >1KB, so small payloads behave like the original implementation.
 
+### CPU-Based Scaling
+
+All benchmarks now automatically detect and use the number of CPU cores available:
+- **Primary benchmark:** Uses `os.cpu_count()` threads (prevents thread pool saturation)
+- **Intensive benchmark:** Uses `os.cpu_count() * 2` workers (stress test)
+- **Usage example:** Uses `os.cpu_count() * 2` concurrent requests (realistic load)
+
+This ensures benchmarks don't introduce artificial latency by overwhelming the system with too many threads.
+
 ## Benchmark Scripts
 
 ### 1. `benchmark_asyncio_parallel.py` ⭐ **RECOMMENDED**
@@ -29,18 +40,22 @@ This approach works because the GIL release implementation only activates for pa
 **Purpose:** Measures thread parallelism - the primary benefit of GIL release
 
 **What it shows:**
-- Small payloads: 0.82x parallelism (threads serialized by GIL)
-- Large payloads: 1.72x parallelism (threads run in parallel)
-- **Improvement: +109.6%**
+- Uses `os.cpu_count()` threads automatically
+- Small payloads: ~0.8-1.0x parallelism (threads serialized by GIL)
+- Large payloads: ~1.5-2.0x parallelism (threads run in parallel)
+- **Improvement varies by CPU count** (more cores = better potential speedup)
 
 **Run it:**
 ```bash
 python benchmark_asyncio_parallel.py
 ```
 
-**Output:**
+**Sample output (4-core system):**
 ```
-Parallelism Ratio                       0.82x          1.72x      109.6%
+System CPU cores detected: 4
+Using 4 threads for benchmarks
+...
+Parallelism Ratio    0.86x    1.48x    +72.1%
 ```
 
 ### 2. `benchmark_asyncio_gil.py`

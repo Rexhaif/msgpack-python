@@ -9,6 +9,7 @@ the GIL release benefit. It uses:
 - CPU-bound msgpack operations
 """
 import asyncio
+import os
 import time
 import statistics
 import msgpack
@@ -176,7 +177,11 @@ async def main():
     print("  3. Large payloads (>1KB) - GIL released during memcpy")
     
     DURATION = 10.0
-    NUM_WORKERS = 8  # More workers = more contention
+    # Use CPU count * 2 for intensive testing (more workers = more contention)
+    NUM_WORKERS = (os.cpu_count() or 4) * 2
+    
+    print(f"\n  System CPU cores detected: {os.cpu_count() or 4}")
+    print(f"  Using {NUM_WORKERS} workers for intensive test (2x CPU cores)")
     
     # Baseline
     print(f"\n{'='*70}")

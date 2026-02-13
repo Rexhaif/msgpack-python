@@ -6,6 +6,7 @@ This example demonstrates how to use msgpack in an asyncio application
 with the GIL release benefits for large payloads.
 """
 import asyncio
+import os
 import msgpack
 import time
 
@@ -79,12 +80,17 @@ async def main():
     print("EXAMPLE: Asyncio + msgpack with GIL Release")
     print("="*70)
     
+    # Use CPU count for number of concurrent requests to avoid overloading
+    num_requests = (os.cpu_count() or 4) * 2
+    print(f"\n  System CPU cores detected: {os.cpu_count() or 4}")
+    print(f"  Using {num_requests} concurrent requests (2x CPU cores)")
+    
     # Scenario 1: Small payloads (GIL held - less parallelism)
-    print("\nScenario 1: Small payloads (0.5 KB) - GIL held")
+    print(f"\nScenario 1: Small payloads (0.5 KB) - GIL held")
     print("-" * 70)
     start = time.perf_counter()
     
-    tasks = [handle_request(i, 0.5) for i in range(10)]
+    tasks = [handle_request(i, 0.5) for i in range(num_requests)]
     results = await asyncio.gather(*tasks)
     
     elapsed = time.perf_counter() - start
@@ -92,11 +98,11 @@ async def main():
     print(f"Throughput: {len(results)/elapsed:.1f} requests/sec")
     
     # Scenario 2: Large payloads (GIL released - more parallelism)
-    print("\nScenario 2: Large payloads (10 KB) - GIL released")
+    print(f"\nScenario 2: Large payloads (10 KB) - GIL released")
     print("-" * 70)
     start = time.perf_counter()
     
-    tasks = [handle_request(i, 10) for i in range(10)]
+    tasks = [handle_request(i, 10) for i in range(num_requests)]
     results = await asyncio.gather(*tasks)
     
     elapsed = time.perf_counter() - start

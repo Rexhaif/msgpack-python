@@ -15,6 +15,7 @@ The benchmark runs:
 3. Compares latency with/without GIL release
 """
 import asyncio
+import os
 import time
 import statistics
 import msgpack
@@ -190,7 +191,11 @@ async def main():
     print("  3. LARGE payloads (>1KB): GIL released (new implementation)")
     
     duration = 5.0
-    num_workers = 4
+    # Use actual CPU count to avoid overloading the system
+    num_workers = os.cpu_count() or 4
+    
+    print(f"\n  System CPU cores detected: {num_workers}")
+    print(f"  Using {num_workers} msgpack worker threads")
     
     # Baseline: No msgpack operations
     print("\n" + "="*70)

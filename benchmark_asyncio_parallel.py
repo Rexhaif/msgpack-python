@@ -10,6 +10,7 @@ The key metric: With GIL released, multiple msgpack operations can run
 in parallel, reducing total wall-clock time and async task starvation.
 """
 import asyncio
+import os
 import time
 import threading
 import statistics
@@ -135,8 +136,12 @@ async def main():
     print("  - Parallelism ratio: How much parallel speedup (higher = better)")
     print("  - Async pings/sec: How responsive the event loop is (higher = better)")
     
-    NUM_THREADS = 4
+    # Use actual CPU count to avoid overloading the system
+    NUM_THREADS = os.cpu_count() or 4
     ITERATIONS = 500
+    
+    print(f"\n  System CPU cores detected: {NUM_THREADS}")
+    print(f"  Using {NUM_THREADS} threads for benchmarks")
     
     # Test with small payloads (GIL held)
     small_results = await parallel_msgpack_benchmark(
