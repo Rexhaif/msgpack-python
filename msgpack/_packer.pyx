@@ -45,7 +45,7 @@ cdef extern from "pack.h" nogil:
 
 cdef int DEFAULT_RECURSE_LIMIT=511
 cdef long long ITEM_LIMIT = (2**32)-1
-cdef size_t NOGIL_THRESHOLD = 1024  # Only release GIL for payloads > 1KB
+# NOGIL_THRESHOLD removed - GIL is now released for all payload sizes
 
 
 cdef inline int PyBytesLike_Check(object o):
@@ -195,13 +195,11 @@ cdef class Packer:
                 PyErr_Format(ValueError, b"%.200s object is too large", Py_TYPE(o).tp_name)
             rawval = o
             msgpack_pack_bin(&self.pk, L)
-            if L > NOGIL_THRESHOLD:
-                with nogil:
-                    rc = msgpack_pack_raw_body(&self.pk, rawval, L)
-                if rc == -1:
-                    raise MemoryError("Unable to allocate internal buffer.")
-            else:
-                msgpack_pack_raw_body(&self.pk, rawval, L)
+            # Always release GIL for raw body packing
+            with nogil:
+                rc = msgpack_pack_raw_body(&self.pk, rawval, L)
+            if rc == -1:
+                raise MemoryError("Unable to allocate internal buffer.")
         elif PyUnicode_CheckExact(o) if strict else PyUnicode_Check(o):
             if self.unicode_errors == NULL:
                 rawval = PyUnicode_AsUTF8AndSize(o, &L)
@@ -214,13 +212,11 @@ cdef class Packer:
                     raise ValueError("unicode string is too large")
                 rawval = o
             msgpack_pack_raw(&self.pk, L)
-            if L > NOGIL_THRESHOLD:
-                with nogil:
-                    rc = msgpack_pack_raw_body(&self.pk, rawval, L)
-                if rc == -1:
-                    raise MemoryError("Unable to allocate internal buffer.")
-            else:
-                msgpack_pack_raw_body(&self.pk, rawval, L)
+            # Always release GIL for raw body packing
+            with nogil:
+                rc = msgpack_pack_raw_body(&self.pk, rawval, L)
+            if rc == -1:
+                raise MemoryError("Unable to allocate internal buffer.")
         elif PyDict_CheckExact(o) if strict else PyDict_Check(o):
             L = len(o)
             if L > ITEM_LIMIT:
@@ -236,13 +232,11 @@ cdef class Packer:
             if L > ITEM_LIMIT:
                 raise ValueError("EXT data is too large")
             msgpack_pack_ext(&self.pk, <long>o.code, L)
-            if L > NOGIL_THRESHOLD:
-                with nogil:
-                    rc = msgpack_pack_raw_body(&self.pk, rawval, L)
-                if rc == -1:
-                    raise MemoryError("Unable to allocate internal buffer.")
-            else:
-                msgpack_pack_raw_body(&self.pk, rawval, L)
+            # Always release GIL for raw body packing
+            with nogil:
+                rc = msgpack_pack_raw_body(&self.pk, rawval, L)
+            if rc == -1:
+                raise MemoryError("Unable to allocate internal buffer.")
         elif type(o) is Timestamp:
             llval = o.seconds
             ulval = o.nanoseconds
@@ -262,13 +256,11 @@ cdef class Packer:
                 raise ValueError("memoryview is too large")
             try:
                 msgpack_pack_bin(&self.pk, L)
-                if L > NOGIL_THRESHOLD:
-                    with nogil:
-                        rc = msgpack_pack_raw_body(&self.pk, <char*>view.buf, L)
-                    if rc == -1:
-                        raise MemoryError("Unable to allocate internal buffer.")
-                else:
-                    msgpack_pack_raw_body(&self.pk, <char*>view.buf, L)
+                # Always release GIL for raw body packing
+                with nogil:
+                    rc = msgpack_pack_raw_body(&self.pk, <char*>view.buf, L)
+                if rc == -1:
+                    raise MemoryError("Unable to allocate internal buffer.")
             finally:
                 PyBuffer_Release(&view);
         elif self.datetime and PyDateTime_CheckExact(o) and datetime_tzinfo(o) is not None:
@@ -326,13 +318,11 @@ cdef class Packer:
             raise ValueError("ext data too large")
         rawval = data  # Extract pointer while GIL is held
         msgpack_pack_ext(&self.pk, typecode, L)
-        if L > NOGIL_THRESHOLD:
-            with nogil:
-                rc = msgpack_pack_raw_body(&self.pk, rawval, L)
-            if rc == -1:
-                raise MemoryError("Unable to allocate internal buffer.")
-        else:
-            msgpack_pack_raw_body(&self.pk, rawval, L)
+        # Always release GIL for raw body packing
+        with nogil:
+            rc = msgpack_pack_raw_body(&self.pk, rawval, L)
+        if rc == -1:
+            raise MemoryError("Unable to allocate internal buffer.")
 
     @cython.critical_section
     def pack_array_header(self, long long size):
