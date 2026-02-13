@@ -195,9 +195,8 @@ cdef class Packer:
                 PyErr_Format(ValueError, b"%.200s object is too large", Py_TYPE(o).tp_name)
             rawval = o
             msgpack_pack_bin(&self.pk, L)
-            # Always release GIL for raw body packing
-            with nogil:
-                rc = msgpack_pack_raw_body(&self.pk, rawval, L)
+            # Reference version: Never release GIL
+            rc = msgpack_pack_raw_body(&self.pk, rawval, L)
             if rc == -1:
                 raise MemoryError("Unable to allocate internal buffer.")
         elif PyUnicode_CheckExact(o) if strict else PyUnicode_Check(o):
@@ -212,9 +211,8 @@ cdef class Packer:
                     raise ValueError("unicode string is too large")
                 rawval = o
             msgpack_pack_raw(&self.pk, L)
-            # Always release GIL for raw body packing
-            with nogil:
-                rc = msgpack_pack_raw_body(&self.pk, rawval, L)
+            # Reference version: Never release GIL
+            rc = msgpack_pack_raw_body(&self.pk, rawval, L)
             if rc == -1:
                 raise MemoryError("Unable to allocate internal buffer.")
         elif PyDict_CheckExact(o) if strict else PyDict_Check(o):
@@ -232,9 +230,8 @@ cdef class Packer:
             if L > ITEM_LIMIT:
                 raise ValueError("EXT data is too large")
             msgpack_pack_ext(&self.pk, <long>o.code, L)
-            # Always release GIL for raw body packing
-            with nogil:
-                rc = msgpack_pack_raw_body(&self.pk, rawval, L)
+            # Reference version: Never release GIL
+            rc = msgpack_pack_raw_body(&self.pk, rawval, L)
             if rc == -1:
                 raise MemoryError("Unable to allocate internal buffer.")
         elif type(o) is Timestamp:
@@ -256,9 +253,8 @@ cdef class Packer:
                 raise ValueError("memoryview is too large")
             try:
                 msgpack_pack_bin(&self.pk, L)
-                # Always release GIL for raw body packing
-                with nogil:
-                    rc = msgpack_pack_raw_body(&self.pk, <char*>view.buf, L)
+                # Reference version: Never release GIL
+                rc = msgpack_pack_raw_body(&self.pk, <char*>view.buf, L)
                 if rc == -1:
                     raise MemoryError("Unable to allocate internal buffer.")
             finally:
@@ -318,9 +314,8 @@ cdef class Packer:
             raise ValueError("ext data too large")
         rawval = data  # Extract pointer while GIL is held
         msgpack_pack_ext(&self.pk, typecode, L)
-        # Always release GIL for raw body packing
-        with nogil:
-            rc = msgpack_pack_raw_body(&self.pk, rawval, L)
+        # Reference version: Never release GIL
+        rc = msgpack_pack_raw_body(&self.pk, rawval, L)
         if rc == -1:
             raise MemoryError("Unable to allocate internal buffer.")
 

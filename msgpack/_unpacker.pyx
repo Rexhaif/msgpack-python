@@ -319,7 +319,7 @@ cdef class Unpacker:
         self.buf = NULL
 
     def __dealloc__(self):
-        PyMem_Free(self.buf)
+        free(self.buf)
         self.buf = NULL
 
     @cython.critical_section
@@ -366,7 +366,7 @@ cdef class Unpacker:
 
         self.max_buffer_size = max_buffer_size
         self.read_size = read_size
-        self.buf = <char*>PyMem_Malloc(read_size)
+        self.buf = <char*>malloc(read_size)
         if self.buf == NULL:
             raise MemoryError("Unable to allocate internal buffer.")
         self.buf_size = read_size
@@ -421,13 +421,13 @@ cdef class Unpacker:
                 if new_size > self.max_buffer_size:
                     raise BufferFull
                 new_size = min(new_size*2, self.max_buffer_size)
-                new_buf = <char*>PyMem_Malloc(new_size)
+                new_buf = <char*>malloc(new_size)
                 if new_buf == NULL:
                     # self.buf still holds old buffer and will be freed during
                     # obj destruction
                     raise MemoryError("Unable to enlarge internal buffer.")
                 memcpy(new_buf, buf + head, tail - head)
-                PyMem_Free(buf)
+                free(buf)
 
                 buf = new_buf
                 buf_size = new_size
